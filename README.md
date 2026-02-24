@@ -211,13 +211,14 @@ npm run test:coverage       # Con informe de cobertura HTML (coverage/)
 
 ## Documentación adicional
 
-- `docs/implementation_plan.md` — Arquitectura completa, schema SQLite, patrones de seguridad
-- `docs/task.md` — Plan de trabajo por fases
-- `docs/comparativa.md` — Matriz de trade-offs (seguridad, complejidad, UX)
-- `docs/cuando-usar.md` — Árbol de decisión: ¿qué auth usar?
-- `docs/produccion.md` — Checklist para despliegue en producción
-- `docs/owasp.md` — Mapa OWASP A2:2021 Broken Authentication
-- `docs/glosario.md` — Glosario de términos técnicos
+- [Arquitectura completa, schema SQLite, patrones de seguridad](https://github.com/amunozpa/authentication-project/blob/main/docs/implementation_plan.md)
+- [Plan de trabajo por fases](https://github.com/amunozpa/authentication-project/blob/main/docs/task.md)
+- [Matriz de trade-offs — seguridad, complejidad, UX](https://github.com/amunozpa/authentication-project/blob/main/docs/comparativa.md)
+- [Árbol de decisión: ¿qué auth usar?](https://github.com/amunozpa/authentication-project/blob/main/docs/cuando-usar.md)
+- [Checklist para despliegue en producción](https://github.com/amunozpa/authentication-project/blob/main/docs/produccion.md)
+- [Mapa OWASP A07:2021 Broken Authentication](https://github.com/amunozpa/authentication-project/blob/main/docs/owasp.md)
+- [Glosario de términos técnicos](https://github.com/amunozpa/authentication-project/blob/main/docs/glosario.md)
+- [Diagramas de secuencia Mermaid](https://github.com/amunozpa/authentication-project/blob/main/docs/diagrams/README.md)
 
 ---
 
