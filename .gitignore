@@ -1,0 +1,34 @@
+# Variables de entorno — NUNCA committear
+.env
+.env.local
+.env.*.local
+
+# Base de datos SQLite
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Compilación TypeScript
+dist/
+
+# Dependencias
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

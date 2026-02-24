@@ -1,0 +1,72 @@
+name: Load Tests
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  load-test:
+    name: Artillery — Pruebas de Carga
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Arrancar servidor en background
+        run: |
+          nohup npx tsx src/index.ts &
+          echo $! > server.pid
+        env:
+          NODE_ENV: production
+          PORT: '3000'
+          JWT_SECRET: load-test-secret-mínimo-32-caracteres-ci
+          JWT_EXPIRY_ACCESS: 15m
+          JWT_EXPIRY_REFRESH: 7d
+          IP_HASH_SALT: load-test-salt-ci
+          M2M_CLIENT_ID: load-m2m-client
+          M2M_CLIENT_SECRET: load-m2m-secret-long-enough-here
+          FRONTEND_URL: http://localhost:3000
+
+      - name: Esperar a que el servidor esté listo
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/v1/health; then
+              echo "Servidor listo"
+              break
+            fi
+            echo "Esperando... intento $i/30"
+            sleep 2
+          done
+
+      - name: Artillery — pruebas de carga
+        run: npx artillery run tests/load.yml --output load-report.json
+
+      - name: Generar informe HTML
+        run: npx artillery report load-report.json --output load-report.html
+        if: always()
+
+      - name: Subir informe de carga
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-report
+          path: |
+            load-report.json
+            load-report.html
+          retention-days: 14
+
+      - name: Detener servidor
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi

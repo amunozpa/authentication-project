@@ -1,0 +1,89 @@
+config:
+  target: 'http://localhost:3000'
+  plugins:
+    expect: {}
+  phases:
+    - name: Calentamiento
+      duration: 15
+      arrivalRate: 5
+    - name: Carga sostenida
+      duration: 60
+      arrivalRate: 30
+    - name: Pico de carga
+      duration: 15
+      arrivalRate: 50
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+
+scenarios:
+  - name: Health check
+    weight: 30
+    flow:
+      - get:
+          url: '/api/v1/health'
+          expect:
+            - statusCode: 200
+            - hasProperty: 'estado'
+
+  - name: Forgot password — respuesta anti-enumeración
+    weight: 20
+    flow:
+      - post:
+          url: '/api/v1/auth/forgot-password'
+          json:
+            email: 'load-test-{{ $randomInt(1, 999999) }}@example.com'
+          expect:
+            - statusCode: 200
+
+  - name: Magic link request — respuesta anti-enumeración
+    weight: 20
+    flow:
+      - post:
+          url: '/api/v1/magic/request'
+          json:
+            email: 'magic-load-{{ $randomInt(1, 999999) }}@example.com'
+          expect:
+            - statusCode: 200
+
+  - name: Registro + Login
+    weight: 20
+    flow:
+      - post:
+          url: '/api/v1/auth/register'
+          json:
+            email: 'artillery-{{ $randomInt(1, 9999999) }}@loadtest.com'
+            password: 'Artillery2024!'
+          capture:
+            - json: '$.mensaje'
+              as: registerMsg
+
+      # Login fallido (email no verificado — esperamos 403)
+      - post:
+          url: '/api/v1/auth/login'
+          json:
+            email: 'artillery-{{ $randomInt(1, 9999999) }}@loadtest.com'
+            password: 'Artillery2024!'
+          expect:
+            - statusCode:
+                - 200
+                - 403
+                - 401
+
+  - name: Endpoints protegidos sin auth — deben rechazar
+    weight: 10
+    flow:
+      - get:
+          url: '/api/v1/mfa/status'
+          expect:
+            - statusCode: 401
+
+      - get:
+          url: '/api/v1/admin/users'
+          expect:
+            - statusCode: 401
+
+      - get:
+          url: '/api/v1/keys'
+          expect:
+            - statusCode: 401

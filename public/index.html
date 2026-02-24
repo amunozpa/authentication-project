@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuthLab POC</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: '#6366f1' }
+        }
+      }
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .tab-active { @apply border-b-2 border-indigo-400 text-indigo-400; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-200 min-h-screen" x-data="authApp()" x-init="init()" x-cloak>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div x-show="toast.visible" x-transition
+     class="fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-xl text-sm font-medium"
+     :class="{ 'bg-green-700 text-green-100': toast.type==='ok', 'bg-red-700 text-red-100': toast.type==='err', 'bg-yellow-700 text-yellow-100': toast.type==='warn' }">
+  <span x-text="toast.msg"></span>
+</div>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl">🔐</span>
+    <div>
+      <h1 class="font-bold text-white leading-none">AuthLab POC</h1>
+      <p class="text-xs text-slate-500">Demo de autenticación — Fases 1–6</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <template x-if="user">
+      <div class="flex items-center gap-3">
+        <div class="text-right hidden sm:block">
+          <p class="text-sm text-slate-300" x-text="user.email"></p>
+          <p class="text-xs text-slate-500" x-text="'Roles: ' + (user.roles?.join(', ') ?? '')"></p>
+        </div>
+        <span class="text-xs bg-indigo-600 text-indigo-100 px-2 py-1 rounded-full"
+              x-text="user.roles?.[0] ?? 'user'"></span>
+        <button @click="logout()"
+                class="text-xs text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 px-3 py-1 rounded transition">
+          Salir
+        </button>
+      </div>
+    </template>
+    <template x-if="!user">
+      <span class="text-sm text-slate-500 italic">No autenticado</span>
+    </template>
+  </div>
+</header>
+
+<!-- ── Tab navigation ─────────────────────────────────────────────────────── -->
+<nav class="bg-slate-800 border-b border-slate-700 px-4 flex gap-1 overflow-x-auto">
+  <template x-for="t in [
+    { id:'auth',   label:'Auth',       icon:'👤' },
+    { id:'jwt',    label:'JWT',        icon:'🎫' },
+    { id:'mfa',    label:'MFA',        icon:'🔑' },
+    { id:'magic',  label:'Magic Link', icon:'✨' },
+    { id:'rbac',   label:'RBAC',       icon:'🛡️' },
+    { id:'dpop',   label:'DPoP',       icon:'🔒' },
+    { id:'oauth',  label:'OAuth',      icon:'🌐' },
+  ]">
+    <button @click="tab = t.id"
+            :class="tab === t.id ? 'border-b-2 border-indigo-400 text-indigo-300' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-3 text-sm font-medium whitespace-nowrap transition flex items-center gap-1.5">
+      <span x-text="t.icon"></span>
+      <span x-text="t.label"></span>
+    </button>
+  </template>
+</nav>
+
+<!-- ── Main content ───────────────────────────────────────────────────────── -->
+<main class="max-w-4xl mx-auto p-5 pb-24 space-y-5">
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: AUTH
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'auth'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">👤 Autenticación</h2>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <!-- Registro -->
+      <div class="bg-slate-800 rounded-xl p-5 space-y-3 border border-slate-700">
+        <h3 class="font-medium text-slate-300">Registrar cuenta</h3>
+        <input x-model="email" type="email" placeholder="email@ejemplo.com"
+               class="w-full bg-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <input x-model="password" type="password" placeholder="Contraseña (mín. 8 chars)"
+               class="w-full bg-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+               @keydown.enter="register()"/>
+        <button @click="register()"
+                class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 rounded-lg transition">
+          Registrar
+        </button>
+        <p class="text-xs text-slate-500">El link de verificación aparece en la consola del servidor (dev mode)</p>
+      </div>
+
+      <!-- Login -->
+      <div class="bg-slate-800 rounded-xl p-5 space-y-3 border border-slate-700">
+        <h3 class="font-medium text-slate-300">Iniciar sesión</h3>
+        <input x-model="email" type="email" placeholder="email@ejemplo.com"
+               class="w-full bg-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <input x-model="password" type="password" placeholder="Contraseña"
+               class="w-full bg-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+               @keydown.enter="doLogin()"/>
+        <button @click="doLogin()"
+                class="w-full bg-green-700 hover:bg-green-600 text-white text-sm font-medium py-2 rounded-lg transition">
+          Iniciar sesión
+        </button>
+        <div class="flex gap-2">
+          <button @click="tab='magic'"
+                  class="flex-1 text-xs text-slate-400 hover:text-slate-300 border border-slate-600 py-1.5 rounded-lg transition">
+            ✨ Magic Link
+          </button>
+          <button @click="tab='oauth'"
+                  class="flex-1 text-xs text-slate-400 hover:text-slate-300 border border-slate-600 py-1.5 rounded-lg transition">
+            🌐 OAuth
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usuario actual -->
+    <template x-if="user">
+      <div class="bg-slate-800 rounded-xl p-5 border border-slate-700">
+        <h3 class="font-medium text-slate-300 mb-3">Usuario autenticado</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+          <div>
+            <p class="text-slate-500 text-xs">Email</p>
+            <p class="text-slate-200" x-text="user.email"></p>
+          </div>
+          <div>
+            <p class="text-slate-500 text-xs">Roles</p>
+            <p class="text-slate-200" x-text="user.roles?.join(', ')"></p>
+          </div>
+          <div>
+            <p class="text-slate-500 text-xs">MFA</p>
+            <p x-text="user.mfa_enabled ? '✓ Activado' : '✗ Desactivado'"
+               :class="user.mfa_enabled ? 'text-green-400' : 'text-slate-400'"></p>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: JWT
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'jwt'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">🎫 JWT — Access Token</h2>
+
+    <template x-if="!accessToken">
+      <div class="bg-slate-800 rounded-xl p-5 text-center text-slate-500">
+        Inicia sesión primero para ver los tokens.
+      </div>
+    </template>
+
+    <template x-if="accessToken">
+      <div class="space-y-4">
+        <!-- Token info -->
+        <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-medium text-slate-300">Access Token (AT)</h3>
+            <span :class="tokenExpired ? 'text-red-400' : 'text-green-400'"
+                  class="text-xs font-mono"
+                  x-text="tokenExpired ? '⚠ EXPIRADO' : ('⏱ ' + (tokenExpTime ?? '—'))"></span>
+          </div>
+
+          <!-- Payload decodificado -->
+          <div x-show="decoded" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <template x-for="[k, v] in Object.entries(decoded ?? {})">
+              <div>
+                <p class="text-slate-500 text-xs" x-text="k"></p>
+                <p class="text-slate-200 font-mono text-xs break-all"
+                   x-text="typeof v === 'object' ? JSON.stringify(v) : String(v)"></p>
+              </div>
+            </template>
+          </div>
+
+          <!-- Raw token -->
+          <details class="text-xs">
+            <summary class="text-slate-500 cursor-pointer hover:text-slate-400">Ver token raw</summary>
+            <p class="mt-2 font-mono text-slate-400 break-all text-xs bg-slate-900 rounded p-2"
+               x-text="accessToken"></p>
+          </details>
+        </div>
+
+        <!-- Acciones -->
+        <div class="flex flex-wrap gap-3">
+          <button @click="refresh()"
+                  class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition">
+            🔄 Renovar Token (refresh)
+          </button>
+          <button @click="fetchSessions()"
+                  class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm px-4 py-2 rounded-lg transition">
+            📋 Ver Sesiones
+          </button>
+          <button @click="revokeAll()"
+                  class="bg-red-800 hover:bg-red-700 text-red-100 text-sm px-4 py-2 rounded-lg transition">
+            ⛔ Revocar Todas
+          </button>
+        </div>
+
+        <!-- Sesiones -->
+        <template x-if="sessions.length > 0">
+          <div class="bg-slate-800 rounded-xl p-5 border border-slate-700">
+            <h3 class="font-medium text-slate-300 mb-3">Sesiones activas (<span x-text="sessions.length"></span>)</h3>
+            <div class="space-y-2">
+              <template x-for="s in sessions">
+                <div class="bg-slate-700/50 rounded-lg p-3 text-xs font-mono grid grid-cols-2 gap-2">
+                  <div>
+                    <span class="text-slate-500">familyId: </span>
+                    <span class="text-slate-300" x-text="s.familyId?.slice(0,12) + '...'"></span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500">kid: </span>
+                    <span class="text-slate-300" x-text="s.kid"></span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500">expira: </span>
+                    <span class="text-slate-300" x-text="new Date(s.expiresAt).toLocaleString()"></span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500">UA: </span>
+                    <span class="text-slate-300" x-text="(s.userAgent ?? '—').slice(0,30)"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: MFA
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'mfa'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">🔑 MFA — TOTP</h2>
+
+    <!-- Paso-2 de login MFA -->
+    <template x-if="mfa.sessionToken">
+      <div class="bg-yellow-900/40 border border-yellow-700 rounded-xl p-5 space-y-3">
+        <h3 class="font-medium text-yellow-300">⚠ Verificación MFA requerida</h3>
+        <p class="text-sm text-yellow-200">Introduce el código TOTP de tu app para completar el login.</p>
+        <div class="flex gap-3">
+          <input x-model="mfa.code" type="text" inputmode="numeric" maxlength="6"
+                 placeholder="123456" @keydown.enter="mfaVerifyLogin()"
+                 class="w-36 bg-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-center outline-none focus:ring-2 focus:ring-yellow-500"/>
+          <button @click="mfaVerifyLogin()"
+                  class="bg-yellow-600 hover:bg-yellow-500 text-white text-sm px-5 py-2 rounded-lg transition">
+            Verificar
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="!user && !mfa.sessionToken">
+      <div class="bg-slate-800 rounded-xl p-5 text-center text-slate-500">
+        Inicia sesión para gestionar MFA.
+      </div>
+    </template>
+
+    <template x-if="user">
+      <div class="space-y-4">
+        <!-- Estado -->
+        <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-center justify-between">
+          <div>
+            <h3 class="font-medium text-slate-300">Estado MFA</h3>
+            <p class="text-sm" x-show="mfa.status !== null"
+               :class="mfa.status ? 'text-green-400' : 'text-slate-400'"
+               x-text="mfa.status ? '✓ MFA activado' : '✗ MFA desactivado'"></p>
+            <p class="text-sm text-slate-500" x-show="mfa.status === null">Cargando...</p>
+          </div>
+          <button @click="fetchMfaStatus()"
+                  class="text-xs text-slate-400 hover:text-slate-300 border border-slate-600 px-3 py-1 rounded transition">
+            Actualizar
+          </button>
+        </div>
+
+        <!-- Configurar MFA -->
+        <template x-if="!mfa.status">
+          <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+            <h3 class="font-medium text-slate-300">Configurar MFA</h3>
+
+            <button x-show="!mfa.qrUrl" @click="mfaSetup()"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition">
+              Generar QR / Secret
+            </button>
+
+            <template x-if="mfa.qrUrl">
+              <div class="space-y-4">
+                <div class="flex items-start gap-6">
+                  <img :src="mfa.qrUrl" alt="QR MFA" class="w-40 h-40 rounded-lg bg-white p-1"/>
+                  <div class="space-y-2">
+                    <p class="text-sm text-slate-400">1. Escanea con Google Authenticator, Authy, etc.</p>
+                    <p class="text-sm text-slate-400">2. O introduce el secret manualmente:</p>
+                    <p class="font-mono text-xs bg-slate-900 px-3 py-2 rounded text-green-400 break-all"
+                       x-text="mfa.secret"></p>
+                  </div>
+                </div>
+
+                <div class="flex gap-3 items-center">
+                  <input x-model="mfa.code" type="text" inputmode="numeric" maxlength="6"
+                         placeholder="123456 (código TOTP)" @keydown.enter="mfaEnable()"
+                         class="w-48 bg-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-center outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  <button @click="mfaEnable()"
+                          class="bg-green-700 hover:bg-green-600 text-white text-sm px-5 py-2 rounded-lg transition">
+                    Activar MFA
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Desactivar MFA -->
+        <template x-if="mfa.status">
+          <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+            <h3 class="font-medium text-slate-300">Desactivar MFA</h3>
+            <div class="flex gap-3 items-center">
+              <input x-model="mfa.code" type="text" inputmode="numeric" maxlength="6"
+                     placeholder="123456 (código TOTP)" @keydown.enter="mfaDisable()"
+                     class="w-48 bg-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-center outline-none focus:ring-2 focus:ring-indigo-500"/>
+              <button @click="mfaDisable()"
+                      class="bg-red-800 hover:bg-red-700 text-red-100 text-sm px-5 py-2 rounded-lg transition">
+                Desactivar
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Códigos de recuperación -->
+        <template x-if="mfa.recoveryCodes.length > 0">
+          <div class="bg-slate-800 rounded-xl p-5 border border-yellow-700/50 space-y-3">
+            <h3 class="font-medium text-yellow-400">⚠ Códigos de recuperación (guárdalos)</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <template x-for="code in mfa.recoveryCodes">
+                <span class="font-mono text-xs bg-slate-900 text-green-400 px-3 py-2 rounded text-center"
+                      x-text="code"></span>
+              </template>
+            </div>
+            <p class="text-xs text-slate-500">Cada código es de un solo uso. Úsalos si pierdes acceso a tu app TOTP.</p>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: MAGIC LINK
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'magic'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">✨ Magic Link / Passwordless</h2>
+
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+      <div class="space-y-2">
+        <p class="text-sm text-slate-400">
+          Autenticación sin contraseña — el usuario recibe un link de un solo uso por email.
+        </p>
+        <ul class="text-xs text-slate-500 space-y-1 list-disc list-inside">
+          <li>Token SHA-256 almacenado en BD (nunca el token en claro)</li>
+          <li>TTL de 15 minutos, uso único</li>
+          <li>Anti-enumeración: siempre responde 200</li>
+        </ul>
+      </div>
+
+      <div class="flex gap-3">
+        <input x-model="magicEmail" type="email" placeholder="tu@email.com"
+               class="flex-1 bg-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+               @keydown.enter="requestMagicLink()"/>
+        <button @click="requestMagicLink()"
+                class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-5 py-2 rounded-lg transition">
+          Enviar link
+        </button>
+      </div>
+
+      <div class="bg-slate-900 rounded-lg p-4 text-xs text-slate-400 space-y-1">
+        <p class="text-slate-300 font-medium">Dev mode:</p>
+        <p>El link aparece en la consola del servidor (stdout). Cópialo y ábrelo en el navegador:</p>
+        <p class="font-mono text-green-400">GET /api/v1/magic/verify?token=&lt;token&gt;</p>
+        <p>Tras la verificación, el servidor devuelve el AT en el JSON (en producción redirige al frontend).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: RBAC
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'rbac'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">🛡️ RBAC — Control de Acceso por Roles</h2>
+
+    <template x-if="!user">
+      <div class="bg-slate-800 rounded-xl p-5 text-center text-slate-500">
+        Inicia sesión para probar RBAC.
+      </div>
+    </template>
+
+    <template x-if="user">
+      <div class="space-y-4">
+        <!-- Permisos del usuario -->
+        <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-medium text-slate-300">Tus permisos (resueltos desde roles)</h3>
+            <button @click="fetchPermissions()"
+                    class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-800 px-3 py-1 rounded transition">
+              Cargar permisos
+            </button>
+          </div>
+
+          <template x-if="rbac.permissions !== null">
+            <div>
+              <p class="text-xs text-slate-500 mb-2">
+                Roles: <span class="text-indigo-400" x-text="rbac.roles.join(', ')"></span>
+                — Permisos: <span class="text-green-400" x-text="rbac.permissions.length"></span>
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <template x-for="perm in [
+                  'read:content','write:content','publish:content',
+                  'read:own-profile','read:users','write:users',
+                  'delete:users','manage:roles','read:audit-logs','manage:keys'
+                ]">
+                  <div class="flex items-center gap-2 text-xs">
+                    <span x-text="hasPerm(perm) ? '✓' : '✗'"
+                          :class="hasPerm(perm) ? 'text-green-400' : 'text-slate-600'"></span>
+                    <span :class="hasPerm(perm) ? 'text-slate-300' : 'text-slate-600'"
+                          x-text="perm"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Probar endpoints -->
+        <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+          <h3 class="font-medium text-slate-300">Probar endpoints RBAC</h3>
+          <div class="space-y-2">
+            <template x-for="ep in [
+              { m:'GET',    p:'/rbac/content',    perm:'read:content',      label:'GET /content' },
+              { m:'POST',   p:'/rbac/content',    perm:'write:content',     label:'POST /content' },
+              { m:'PUT',    p:'/rbac/content/1',  perm:'publish:content',   label:'PUT /content/1' },
+              { m:'GET',    p:'/rbac/users',       perm:'read:users',        label:'GET /users' },
+              { m:'DELETE', p:'/rbac/users/1',     perm:'delete:users',      label:'DELETE /users/1' },
+              { m:'GET',    p:'/rbac/audit',        perm:'read:audit-logs',   label:'GET /audit' },
+            ]">
+              <div class="flex items-center gap-3 text-sm">
+                <button @click="tryEndpoint(ep.m, ep.p)"
+                        class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded transition w-36 text-left">
+                  <span class="text-indigo-400" x-text="ep.m"></span>
+                  <span class="text-slate-400" x-text="ep.p.replace('/rbac','')"></span>
+                </button>
+                <span class="text-xs text-slate-500 w-32" x-text="ep.perm"></span>
+                <!-- Resultado -->
+                <template x-if="rbac.results[ep.m + ' ' + ep.p]">
+                  <span class="text-xs font-medium"
+                        :class="rbac.results[ep.m + ' ' + ep.p].ok ? 'text-green-400' : 'text-red-400'"
+                        x-text="(rbac.results[ep.m + ' ' + ep.p].ok ? '✓ ' : '✗ ') + rbac.results[ep.m + ' ' + ep.p].status + ' — ' + rbac.results[ep.m + ' ' + ep.p].msg">
+                  </span>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: DPoP
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'dpop'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">🔒 DPoP — Sender-Constrained Tokens</h2>
+
+    <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700 text-xs text-slate-400 space-y-1">
+      <p class="text-slate-300 font-medium">¿Qué demuestra?</p>
+      <p>Bearer tokens: quien tiene el token puede usarlo. DPoP vincula el token a una clave privada del cliente.</p>
+      <p>Si un atacante roba el AT, <strong class="text-red-400">no puede usarlo</strong> sin la clave privada — que nunca sale del navegador.</p>
+    </div>
+
+    <!-- Paso 1 -->
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+      <h3 class="font-medium text-slate-300">
+        <span class="text-indigo-400 font-mono">1.</span> Generar par de claves ECDSA P-256 (WebCrypto)
+      </h3>
+      <button @click="generateDpopKey()"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition">
+        Generar clave efímera en el navegador
+      </button>
+      <template x-if="dpop.jkt">
+        <p class="text-xs font-mono text-green-400">
+          JKT: <span x-text="dpop.jkt"></span>
+        </p>
+      </template>
+    </div>
+
+    <!-- Paso 2 -->
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+      <h3 class="font-medium text-slate-300">
+        <span class="text-indigo-400 font-mono">2.</span> Obtener AT DPoP-bound
+      </h3>
+      <p class="text-xs text-slate-500">
+        Usa las credenciales del tab Auth. El AT resultante incluirá <code class="text-green-400">cnf.jkt</code>.
+      </p>
+      <button @click="getDpopToken()" :disabled="!dpop.keyPair"
+              class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition">
+        POST /dpop/token
+      </button>
+      <template x-if="dpop.token">
+        <div class="space-y-1">
+          <p class="text-xs text-green-400 font-medium">✓ AT DPoP-bound obtenido</p>
+          <p class="text-xs font-mono text-slate-500 break-all" x-text="dpop.token.slice(0,80) + '...'"></p>
+        </div>
+      </template>
+    </div>
+
+    <!-- Paso 3 -->
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+      <h3 class="font-medium text-slate-300">
+        <span class="text-indigo-400 font-mono">3.</span> Acceder al recurso protegido
+      </h3>
+      <p class="text-xs text-slate-500">
+        El proof incluye <code class="text-green-400">ath</code> = hash del AT, ligando proof ↔ token.
+      </p>
+      <button @click="dpopAccessProtected()" :disabled="!dpop.token"
+              class="bg-green-700 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition">
+        GET /dpop/protected
+      </button>
+      <template x-if="dpop.protectedResult">
+        <div :class="dpop.protectedResult.ok ? 'text-green-400' : 'text-red-400'"
+             class="text-sm font-medium"
+             x-text="dpop.protectedResult.ok ? '✓ Acceso concedido — proof of possession verificado' : '✗ ' + (dpop.protectedResult.data?.error ?? 'Error')">
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       TAB: OAUTH
+       ════════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'oauth'" class="space-y-4">
+    <h2 class="text-lg font-semibold text-white flex items-center gap-2">🌐 OAuth 2.0</h2>
+
+    <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700 text-xs text-slate-400 space-y-1">
+      <p class="text-slate-300 font-medium">Flujo PKCE + State</p>
+      <p>El estado anti-CSRF y el code_verifier se almacenan en la BD. El AT llega en la URL al redirigir al frontend.</p>
+      <p class="text-yellow-400">Requiere credenciales de GitHub/Google en el .env del servidor.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4">
+      <!-- GitHub -->
+      <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">🐙</span>
+          <div>
+            <h3 class="font-medium text-white">GitHub OAuth</h3>
+            <p class="text-xs text-slate-500">Autorización con Authorization Code + PKCE</p>
+          </div>
+        </div>
+        <button @click="startOAuth('github')"
+                class="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition border border-slate-600">
+          Continuar con GitHub →
+        </button>
+      </div>
+
+      <!-- Google -->
+      <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">🔵</span>
+          <div>
+            <h3 class="font-medium text-white">Google OAuth</h3>
+            <p class="text-xs text-slate-500">Autorización con Authorization Code + PKCE</p>
+          </div>
+        </div>
+        <button @click="startOAuth('google')"
+                class="w-full bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium py-2.5 rounded-lg transition">
+          Continuar con Google →
+        </button>
+      </div>
+    </div>
+
+    <!-- Vinculación -->
+    <template x-if="user">
+      <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
+        <h3 class="font-medium text-slate-300">Vincular cuenta (ya autenticado)</h3>
+        <p class="text-xs text-slate-500">
+          Vincula tu cuenta actual con GitHub o Google. El link de autorización incluirá <code>link_user_id</code> en el estado.
+        </p>
+        <div class="flex gap-3">
+          <a :href="'/api/v1/user/link/github'" target="_blank"
+             class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition">
+            🐙 Vincular GitHub
+          </a>
+          <a :href="'/api/v1/user/link/google'" target="_blank"
+             class="bg-blue-800 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition">
+            🔵 Vincular Google
+          </a>
+        </div>
+      </div>
+    </template>
+  </div>
+
+</main>
+
+<!-- ── Inspector de respuestas API ────────────────────────────────────────── -->
+<div class="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 z-30">
+  <button @click="showRes = !showRes"
+          class="w-full px-5 py-2 text-xs text-slate-400 hover:text-slate-300 flex items-center justify-between">
+    <span class="font-mono">
+      <template x-if="lastRes">
+        <span>
+          <span :class="lastRes.ok ? 'text-green-400' : 'text-red-400'" x-text="lastRes.status"></span>
+          <span class="text-slate-500" x-text="' — ' + (lastRes.path ?? '')"></span>
+        </span>
+      </template>
+      <template x-if="!lastRes"><span class="text-slate-600">Sin respuesta aún</span></template>
+    </span>
+    <span x-text="showRes ? '▼ Inspector API' : '▲ Inspector API'"></span>
+  </button>
+  <div x-show="showRes" x-transition class="max-h-48 overflow-y-auto px-5 pb-4">
+    <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap break-all"
+         x-text="lastRes ? JSON.stringify(lastRes.data, null, 2) : ''"></pre>
+  </div>
+</div>
+
+</body>
+</html>

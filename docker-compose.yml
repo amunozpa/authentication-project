@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-lab
+    ports:
+      - '3000:3000'
+    # Carga variables de entorno desde el archivo .env local
+    env_file:
+      - .env
+    volumes:
+      # Volumen persistente para la base de datos SQLite
+      - sqlite_data:/data
+      # Hot-reload del código fuente en desarrollo
+      - ./src:/app/src:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  sqlite_data:
+    driver: local
