@@ -432,10 +432,8 @@ router.post('/device/code', (req, res) => {
  * Paso 2a: Página de aprobación — GET devuelve HTML interactivo.
  * El usuario introduce el user_code y aprueba/deniega con su JWT.
  */
-router.get('/device/verify', (req, res) => {
-  const userCode = typeof req.query['user_code'] === 'string' ? req.query['user_code'] : '';
-  const safeUserCode = userCode.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
+router.get('/device/verify', (_req, res) => {
+  // El user_code se lee client-side vía URLSearchParams — sin interpolación server-side
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -471,7 +469,11 @@ router.get('/device/verify', (req, res) => {
     <p>Un dispositivo ha solicitado acceso a tu cuenta. Introduce el código que aparece en tu dispositivo y aprueba el acceso.</p>
 
     <label for="userCode">Código del dispositivo</label>
-    <input type="text" id="userCode" value="${safeUserCode}" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" />
+    <input type="text" id="userCode" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" />
+    <script>
+      document.getElementById('userCode').value =
+        new URLSearchParams(window.location.search).get('user_code') || '';
+    </script>
 
     <label for="accessToken">Tu Access Token (Bearer JWT)</label>
     <input type="password" id="accessToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5c..." />
