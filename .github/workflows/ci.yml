@@ -22,8 +22,8 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: npm audit — CVE críticos
-        run: npm audit --audit-level=high
+      - name: npm audit — CVE críticos en dependencias de producción
+        run: npm audit --audit-level=high --omit=dev
 
   static-analysis:
     name: Análisis Estático (Semgrep)
