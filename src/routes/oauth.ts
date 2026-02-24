@@ -434,6 +434,7 @@ router.post('/device/code', (req, res) => {
  */
 router.get('/device/verify', (req, res) => {
   const userCode = typeof req.query['user_code'] === 'string' ? req.query['user_code'] : '';
+  const safeUserCode = userCode.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -470,7 +471,7 @@ router.get('/device/verify', (req, res) => {
     <p>Un dispositivo ha solicitado acceso a tu cuenta. Introduce el código que aparece en tu dispositivo y aprueba el acceso.</p>
 
     <label for="userCode">Código del dispositivo</label>
-    <input type="text" id="userCode" value="${userCode}" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" />
+    <input type="text" id="userCode" value="${safeUserCode}" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" />
 
     <label for="accessToken">Tu Access Token (Bearer JWT)</label>
     <input type="password" id="accessToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5c..." />

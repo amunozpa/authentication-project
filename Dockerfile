@@ -20,6 +20,11 @@ COPY . .
 # Directorio para la base de datos SQLite (montado como volumen)
 RUN mkdir -p /data
 
+# ── Usuario no-root (seguridad) ───────────────────────────────────────────────
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    chown -R appuser:appgroup /app /data
+USER appuser
+
 # ── Configuración ─────────────────────────────────────────────────────────────
 EXPOSE 3000
 
