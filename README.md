@@ -1,7 +1,7 @@
 # Auth Lab — Maestro de Autenticación
 
-[![CI](https://github.com/tu-usuario/authentication-project/actions/workflows/ci.yml/badge.svg)](https://github.com/tu-usuario/authentication-project/actions/workflows/ci.yml)
-[![Load Tests](https://github.com/tu-usuario/authentication-project/actions/workflows/load.yml/badge.svg)](https://github.com/tu-usuario/authentication-project/actions/workflows/load.yml)
+[![CI](https://github.com/amunozpa/authentication-project/actions/workflows/ci.yml/badge.svg)](https://github.com/amunozpa/authentication-project/actions/workflows/ci.yml)
+[![Load Tests](https://github.com/amunozpa/authentication-project/actions/workflows/load.yml/badge.svg)](https://github.com/amunozpa/authentication-project/actions/workflows/load.yml)
 [![Coverage: Lines ≥80%](https://img.shields.io/badge/coverage-lines%20%E2%89%A580%25-brightgreen)](#)
 [![Node.js 20](https://img.shields.io/badge/node-20-brightgreen)](https://nodejs.org)
 
