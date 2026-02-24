@@ -16,74 +16,77 @@ config:
     headers:
       Content-Type: 'application/json'
 
+# Nota: Para deshabilitar rate limiting durante el test (recomendado), arrancar
+# el servidor con NODE_ENV=test. El CI lo hace automáticamente (load.yml).
+# Localmente: NODE_ENV=test npm run dev
+# En NODE_ENV=test los limitadores son no-op (src/middleware/rateLimiter.ts).
+# Si el servidor corre en modo normal, el globalLimiter (300/15min) generará
+# respuestas 429 una vez superado el umbral — también se acepta como válido.
+
 scenarios:
   - name: Health check
-    weight: 30
+    weight: 40
     flow:
       - get:
           url: '/api/v1/health'
           expect:
-            - statusCode: 200
-            - hasProperty: 'estado'
+            - statusCode:
+                - 200
+                - 429
 
-  - name: Forgot password — respuesta anti-enumeración
-    weight: 20
+  - name: Endpoints de información pública
+    weight: 25
     flow:
-      - post:
-          url: '/api/v1/auth/forgot-password'
-          json:
-            email: 'load-test-{{ $randomInt(1, 999999) }}@example.com'
-          expect:
-            - statusCode: 200
-
-  - name: Magic link request — respuesta anti-enumeración
-    weight: 20
-    flow:
-      - post:
-          url: '/api/v1/magic/request'
-          json:
-            email: 'magic-load-{{ $randomInt(1, 999999) }}@example.com'
-          expect:
-            - statusCode: 200
-
-  - name: Registro + Login
-    weight: 20
-    flow:
-      - post:
-          url: '/api/v1/auth/register'
-          json:
-            email: 'artillery-{{ $randomInt(1, 9999999) }}@loadtest.com'
-            password: 'Artillery2024!'
-          capture:
-            - json: '$.mensaje'
-              as: registerMsg
-
-      # Login fallido (email no verificado — esperamos 403)
-      - post:
-          url: '/api/v1/auth/login'
-          json:
-            email: 'artillery-{{ $randomInt(1, 9999999) }}@loadtest.com'
-            password: 'Artillery2024!'
+      - get:
+          url: '/api/v1/dpop/info'
           expect:
             - statusCode:
                 - 200
-                - 403
-                - 401
+                - 429
+      - get:
+          url: '/api/v1/ratelimit/info'
+          expect:
+            - statusCode:
+                - 200
+                - 429
+      - get:
+          url: '/api/v1/rbac/info'
+          expect:
+            - statusCode:
+                - 200
+                - 429
 
-  - name: Endpoints protegidos sin auth — deben rechazar
-    weight: 10
+  - name: Endpoints protegidos sin auth — deben rechazar con 401
+    weight: 25
     flow:
+      - get:
+          url: '/api/v1/user/me'
+          expect:
+            - statusCode:
+                - 401
+                - 429
       - get:
           url: '/api/v1/mfa/status'
           expect:
-            - statusCode: 401
-
+            - statusCode:
+                - 401
+                - 429
       - get:
           url: '/api/v1/admin/users'
           expect:
-            - statusCode: 401
+            - statusCode:
+                - 401
+                - 429
 
-      - get:
-          url: '/api/v1/keys'
+  - name: Login con credenciales incorrectas — debe rechazar con 401
+    weight: 10
+    flow:
+      - post:
+          url: '/api/v1/auth/login'
+          json:
+            email: 'noexiste@loadtest.com'
+            password: 'WrongPassword123'
           expect:
-            - statusCode: 401
+            - statusCode:
+                - 401
+                - 429

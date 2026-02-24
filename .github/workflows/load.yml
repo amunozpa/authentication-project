@@ -26,7 +26,7 @@ jobs:
           nohup npx tsx src/index.ts &
           echo $! > server.pid
         env:
-          NODE_ENV: production
+          NODE_ENV: test
           PORT: '3000'
           JWT_SECRET: load-test-secret-mínimo-32-caracteres-ci
           JWT_EXPIRY_ACCESS: 15m
