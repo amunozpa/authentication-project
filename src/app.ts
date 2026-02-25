@@ -7,6 +7,8 @@ import express, { Request, Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import pinoHttp from 'pino-http';
+import swaggerUi from 'swagger-ui-express';
+import { openApiDocument } from './openapi/index';
 import { config } from './config/env';
 import { logger } from './logger';
 import { correlationIdMiddleware } from './middleware/correlationId';
@@ -106,6 +108,13 @@ app.use('/api/v1/paseto', pasetoRouter);
 app.use('/api/v1/dpop', dpopRouter);
 app.use('/api/v1/rbac', rbacRouter);
 app.use('/api/v1/ratelimit', ratelimitRouter);
+
+// ── Swagger UI ────────────────────────────────────────────────────────────────
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument, {
+  customSiteTitle: 'Auth Lab — API Docs',
+  swaggerOptions: { persistAuthorization: true },
+}));
+app.get('/api/docs.json', (_req: Request, res: Response) => res.json(openApiDocument));
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {
