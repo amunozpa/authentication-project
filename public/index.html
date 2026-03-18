@@ -632,6 +632,111 @@
       </div>
     </div>
 
+    <!-- Client Credentials — M2M -->
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+      <div>
+        <h3 class="font-medium text-slate-300">Client Credentials <span class="text-xs text-slate-500 ml-1">(M2M — máquina a máquina)</span></h3>
+        <p class="text-xs text-slate-500 mt-1">Sin usuario ni redirect. Un servicio se autentica con <code class="text-slate-400">client_id</code> + <code class="text-slate-400">client_secret</code> y obtiene un AT con scopes (no roles).</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500 block mb-1">client_id</label>
+          <input x-model="m2m.clientId" type="text" placeholder="m2m_demo_client_id"
+                 class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 block mb-1">client_secret</label>
+          <input x-model="m2m.clientSecret" type="password" placeholder="••••••••"
+                 class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono" />
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button @click="m2mGetToken()"
+                class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition border border-slate-600">
+          1. Obtener token M2M
+        </button>
+        <button @click="m2mAccessProtected()" :disabled="!m2m.token"
+                class="bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition">
+          2. GET /m2m/protected
+        </button>
+      </div>
+
+      <template x-if="m2m.token">
+        <div class="space-y-2">
+          <p class="text-xs text-green-400 font-medium">✓ Token M2M obtenido</p>
+          <p class="text-xs font-mono text-slate-500 break-all" x-text="m2m.token.slice(0, 80) + '...'"></p>
+        </div>
+      </template>
+
+      <template x-if="m2m.result">
+        <div :class="m2m.result.ok ? 'text-green-400' : 'text-red-400'" class="text-xs font-medium space-y-1">
+          <p x-text="m2m.result.ok ? '✓ Acceso concedido' : '✗ ' + (m2m.result.data?.error ?? 'Error')"></p>
+          <template x-if="m2m.result.ok">
+            <div class="text-slate-400 font-mono space-y-0.5">
+              <p>client_id: <span class="text-slate-300" x-text="m2m.result.data.client_id"></span></p>
+              <p>scopes: <span class="text-slate-300" x-text="m2m.result.data.scopes?.join(', ')"></span></p>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- Device Authorization Grant -->
+    <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-4">
+      <div>
+        <h3 class="font-medium text-slate-300">Device Authorization Grant <span class="text-xs text-slate-500 ml-1">(RFC 8628)</span></h3>
+        <p class="text-xs text-slate-500 mt-1">Para dispositivos sin navegador (CLI, TV, IoT). El dispositivo hace polling mientras el usuario aprueba desde otro dispositivo.</p>
+      </div>
+
+      <button @click="requestDeviceCode()"
+              class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition border border-slate-600">
+        1. Solicitar código de dispositivo
+      </button>
+
+      <template x-if="device.userCode">
+        <div class="space-y-3">
+          <!-- Código para el usuario -->
+          <div class="bg-slate-900 rounded-lg p-4 text-center space-y-2">
+            <p class="text-xs text-slate-500">Introduce este código en la página de verificación:</p>
+            <p class="text-3xl font-mono font-bold tracking-widest text-indigo-400" x-text="device.userCode"></p>
+            <a :href="device.verificationUri" target="_blank"
+               class="inline-block text-xs text-indigo-400 hover:text-indigo-300 underline mt-1"
+               x-text="device.verificationUri"></a>
+          </div>
+
+          <!-- Estado del polling -->
+          <div class="flex items-center gap-3 text-sm">
+            <template x-if="device.status === 'pending'">
+              <div class="flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                <span class="text-yellow-400 text-xs">Esperando aprobación — polling cada <span x-text="device.interval"></span>s</span>
+                <button @click="stopDevicePoll()" class="text-xs text-slate-500 hover:text-slate-300 border border-slate-600 px-2 py-0.5 rounded">Detener</button>
+              </div>
+            </template>
+            <template x-if="device.status === 'approved'">
+              <span class="text-green-400 text-xs font-medium">✓ Autorizado — AT obtenido</span>
+            </template>
+            <template x-if="device.status === 'denied'">
+              <span class="text-red-400 text-xs font-medium">✗ Acceso denegado</span>
+            </template>
+            <template x-if="device.status === 'expired'">
+              <span class="text-slate-500 text-xs font-medium">Código expirado — solicita uno nuevo</span>
+            </template>
+          </div>
+
+          <!-- AT resultante -->
+          <template x-if="device.accessToken">
+            <div class="bg-slate-900 rounded p-3 space-y-1">
+              <p class="text-xs text-green-400 font-medium">Access Token:</p>
+              <p class="text-xs font-mono text-slate-400 break-all" x-text="device.accessToken.slice(0, 80) + '...'"></p>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
     <!-- Vinculación -->
     <template x-if="user">
       <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">

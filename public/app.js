@@ -86,6 +86,27 @@ function authApp() {
       protectedResult: null,
     },
 
+    // ── M2M — Client Credentials Grant ───────────────────────────────────
+    m2m: {
+      clientId: '',
+      clientSecret: '',
+      token: null,
+      result: null,
+    },
+
+    // ── Device Authorization Grant (RFC 8628) ─────────────────────────────
+    device: {
+      deviceCode: null,
+      userCode: null,
+      verificationUri: null,
+      expiresIn: null,
+      interval: 5,
+      polling: false,
+      pollTimer: null,
+      status: null,   // null | 'pending' | 'approved' | 'denied' | 'expired'
+      accessToken: null,
+    },
+
     // ─────────────────────────────────────────────────────────────────────
     // Init
     // ─────────────────────────────────────────────────────────────────────
@@ -503,6 +524,107 @@ function authApp() {
 
     startOAuth(provider) {
       window.location.href = `${API}/oauth/${provider}/start`;
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    // M2M — Client Credentials Grant
+    // ─────────────────────────────────────────────────────────────────────
+
+    async m2mGetToken() {
+      this.m2m.token = null;
+      this.m2m.result = null;
+      const { ok, data } = await this.api('POST', '/oauth/m2m/token', {
+        grant_type: 'client_credentials',
+        client_id: this.m2m.clientId,
+        client_secret: this.m2m.clientSecret,
+      });
+      if (ok) {
+        this.m2m.token = data.access_token;
+        this.showToast('Token M2M obtenido');
+      } else {
+        this.showToast(data.error ?? 'Credenciales inválidas', 'err');
+      }
+    },
+
+    async m2mAccessProtected() {
+      if (!this.m2m.token) { this.showToast('Obtén un token M2M primero', 'err'); return; }
+      const r = await fetch(`${API}/oauth/m2m/protected`, {
+        headers: { 'Authorization': `Bearer ${this.m2m.token}` },
+      });
+      const data = await r.json();
+      this.lastRes = { status: r.status, ok: r.ok, path: 'GET /oauth/m2m/protected', data };
+      this.m2m.result = { ok: r.ok, data };
+      if (r.ok) this.showToast('Acceso M2M concedido');
+      else this.showToast(data.error ?? 'Error', 'err');
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Device Authorization Grant (RFC 8628)
+    // ─────────────────────────────────────────────────────────────────────
+
+    async requestDeviceCode() {
+      this.device.status = null;
+      this.device.accessToken = null;
+      this.stopDevicePoll();
+
+      const { ok, data } = await this.api('POST', '/oauth/device/code');
+      if (!ok) {
+        this.showToast(data.error ?? 'Error al solicitar código', 'err');
+        return;
+      }
+
+      this.device.deviceCode = data.device_code;
+      this.device.userCode = data.user_code;
+      this.device.verificationUri = data.verification_uri;
+      this.device.expiresIn = data.expires_in;
+      this.device.interval = data.interval ?? 5;
+      this.device.status = 'pending';
+      this.showToast(`Código generado: ${data.user_code}`);
+      this.startDevicePoll();
+    },
+
+    startDevicePoll() {
+      this.device.polling = true;
+      this.device.pollTimer = setInterval(() => this.pollDeviceToken(), this.device.interval * 1000);
+    },
+
+    stopDevicePoll() {
+      if (this.device.pollTimer) {
+        clearInterval(this.device.pollTimer);
+        this.device.pollTimer = null;
+      }
+      this.device.polling = false;
+    },
+
+    async pollDeviceToken() {
+      if (!this.device.deviceCode) return;
+
+      const r = await fetch(`${API}/oauth/device/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: this.device.deviceCode,
+        }),
+      });
+      const data = await r.json();
+
+      if (r.ok) {
+        this.device.status = 'approved';
+        this.device.accessToken = data.access_token;
+        this.stopDevicePoll();
+        this.showToast('Dispositivo autorizado — AT obtenido');
+      } else if (data.error === 'authorization_pending') {
+        // Seguir esperando
+      } else if (data.error === 'access_denied') {
+        this.device.status = 'denied';
+        this.stopDevicePoll();
+        this.showToast('Acceso denegado por el usuario', 'err');
+      } else {
+        this.device.status = 'expired';
+        this.stopDevicePoll();
+        this.showToast(data.error_description ?? 'Código expirado', 'err');
+      }
     },
   };
 }
