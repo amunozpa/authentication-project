@@ -271,6 +271,8 @@ export type AuditEventType =
   | 'API_KEY_REVOCADA'
   // GDPR
   | 'CUENTA_ELIMINADA'
+  // Administración
+  | 'ROLES_ACTUALIZADOS'
   // Anomalías de seguridad
   | 'ANOMALIA_CREDENTIAL_STUFFING'
   | 'ANOMALIA_FUERZA_BRUTA'

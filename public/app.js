@@ -72,6 +72,12 @@ function authApp() {
       results: {},
     },
 
+    // ── Admin: gestión de roles ────────────────────────────────────────────
+    adminUsers: {
+      list: [],
+      loading: false,
+    },
+
     // ── DPoP ───────────────────────────────────────────────────────────────
     dpop: {
       keyPair: null,
@@ -85,8 +91,9 @@ function authApp() {
     // ─────────────────────────────────────────────────────────────────────
 
     async init() {
-      // Recoger AT que llega desde el callback OAuth (?at=xxx)
       const params = new URLSearchParams(location.search);
+
+      // Recoger AT que llega desde el callback OAuth (?at=xxx)
       const oauthAt = params.get('at');
       if (oauthAt) {
         this.accessToken = oauthAt;
@@ -101,8 +108,32 @@ function authApp() {
         history.replaceState({}, '', '/');
       }
 
+      // Magic Link — verificar token si viene en la URL
+      const magicToken = params.get('magic_token');
+      if (magicToken) {
+        history.replaceState({}, '', '/');
+        await this.verifyMagicToken(magicToken);
+      }
+
       if (this.accessToken) {
         await this.fetchMe();
+      }
+    },
+
+    async verifyMagicToken(token) {
+      const { data, status } = await this.api('POST', '/magic/verify', { token });
+      if (data.mfa_required) {
+        this.mfa.sessionToken = data.mfa_session_token ?? null;
+        this.showToast('Magic link verificado — introduce tu código TOTP', 'warn');
+        this.tab = 'mfa';
+      } else if (status === 200) {
+        this.accessToken = data.accessToken;
+        localStorage.setItem('authlab_at', this.accessToken);
+        await this.fetchMe();
+        this.showToast('Acceso con Magic Link exitoso');
+        this.tab = 'jwt';
+      } else {
+        this.showToast(data.error ?? 'Magic link inválido o expirado', 'err');
       }
     },
 
@@ -167,21 +198,25 @@ function authApp() {
     },
 
     async doLogin() {
+      if (this.user) {
+        this.showToast('Ya tienes una sesión activa', 'warn');
+        return;
+      }
       const { ok, data, status } = await this.api('POST', '/auth/login', {
         email: this.email,
         password: this.password,
       });
 
-      if (status === 200) {
+      if (data.mfa_required) {
+        this.mfa.sessionToken = data.mfa_session_token ?? null;
+        this.showToast('MFA requerido — introduce el código TOTP', 'warn');
+        this.tab = 'mfa';
+      } else if (status === 200) {
         this.accessToken = data.accessToken;
         localStorage.setItem('authlab_at', this.accessToken);
         await this.fetchMe();
         this.showToast(`Bienvenido, ${this.user?.email ?? ''}`);
         this.tab = 'jwt';
-      } else if (data.code === 'MFA_REQUERIDO') {
-        this.mfa.sessionToken = data.mfa_session_token ?? null;
-        this.showToast('MFA requerido — introduce el código TOTP', 'warn');
-        this.tab = 'mfa';
       } else {
         this.showToast(data.error ?? 'Credenciales incorrectas', 'err');
       }
@@ -249,14 +284,14 @@ function authApp() {
 
     async fetchMfaStatus() {
       const { ok, data } = await this.api('GET', '/mfa/status');
-      if (ok) this.mfa.status = data.mfa_enabled === 1;
+      if (ok) this.mfa.status = data.mfa_enabled === true || data.mfa_enabled === 1;
     },
 
     async mfaSetup() {
       const { ok, data } = await this.api('POST', '/mfa/setup');
       if (ok) {
         this.mfa.secret = data.secret;
-        this.mfa.qrUrl = data.qrCodeDataUrl;
+        this.mfa.qrUrl = data.qr_code;
         this.showToast('Escanea el QR con Google Authenticator o Authy');
       } else {
         this.showToast(data.error ?? 'Error', 'err');
@@ -264,7 +299,7 @@ function authApp() {
     },
 
     async mfaEnable() {
-      const { ok, data } = await this.api('POST', '/mfa/enable', { code: this.mfa.code });
+      const { ok, data } = await this.api('POST', '/mfa/enable', { secret: this.mfa.secret, totp_code: this.mfa.code });
       if (ok) {
         this.mfa.status = true;
         this.mfa.recoveryCodes = data.recoveryCodes ?? [];
@@ -276,7 +311,7 @@ function authApp() {
     },
 
     async mfaDisable() {
-      const { ok, data } = await this.api('POST', '/mfa/disable', { code: this.mfa.code });
+      const { ok, data } = await this.api('DELETE', '/mfa/disable', { totp_code: this.mfa.code });
       if (ok) {
         this.mfa.status = false;
         this.mfa.secret = null;
@@ -291,7 +326,7 @@ function authApp() {
     async mfaVerifyLogin() {
       // Paso-2 del login cuando el servidor devuelve MFA_REQUERIDO
       const { ok, data } = await this.api('POST', '/mfa/verify', {
-        code: this.mfa.code,
+        totp_code: this.mfa.code,
         mfa_session_token: this.mfa.sessionToken,
       });
       if (ok) {
@@ -345,6 +380,28 @@ function authApp() {
 
     hasPerm(perm) {
       return this.rbac.permissions?.includes(perm) ?? false;
+    },
+
+    async fetchAdminUsers() {
+      this.adminUsers.loading = true;
+      const { ok, data } = await this.api('GET', '/admin/users');
+      this.adminUsers.loading = false;
+      if (ok) {
+        this.adminUsers.list = data.data.map(u => ({ ...u, selectedRole: u.roles[0] ?? 'user' }));
+      } else {
+        this.showToast(data.error ?? 'Error al cargar usuarios', 'err');
+      }
+    },
+
+    async changeUserRole(userId, newRole) {
+      const { ok, data } = await this.api('PATCH', `/admin/users/${userId}/roles`, { roles: [newRole] });
+      if (ok) {
+        const u = this.adminUsers.list.find(x => x.id === userId);
+        if (u) u.roles = [newRole];
+        this.showToast(`Rol actualizado a ${newRole}`);
+      } else {
+        this.showToast(data.error ?? 'Error al cambiar rol', 'err');
+      }
     },
 
     // ─────────────────────────────────────────────────────────────────────

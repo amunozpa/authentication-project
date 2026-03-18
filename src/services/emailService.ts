@@ -111,7 +111,7 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
 }
 
 export async function sendMagicLinkEmail(email: string, token: string): Promise<void> {
-  const url = `${config.FRONTEND_URL}/api/v1/magic/verify?token=${token}`;
+  const url = `${config.FRONTEND_URL}/?magic_token=${token}`;
   await sendEmail({
     to: email,
     subject: 'Tu enlace de acceso — Auth Lab',

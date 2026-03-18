@@ -43,7 +43,25 @@ void initializePasetoKeys();
 export const app = express();
 
 // ── Seguridad ────────────────────────────────────────────────────────────────
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-eval'",
+          "'sha256-ooEA/sl80GVm8UdRhuqaaBXIDtK3Jew9QqvAGq2r9tg='",
+          'https://cdn.tailwindcss.com',
+          'https://cdn.jsdelivr.net',
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com'],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+      },
+    },
+  }),
+);
 
 app.use(
   cors({

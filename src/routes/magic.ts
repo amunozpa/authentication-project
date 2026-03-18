@@ -123,6 +123,45 @@ router.post(
  *
  * El token se marca como usado ANTES de emitir credenciales (one-time garantizado).
  */
+router.post(
+  '/verify',
+  asyncHandler(async (req, res) => {
+    const rawToken = req.body['token'];
+    if (typeof rawToken !== 'string' || !rawToken) {
+      throw new AppError(400, 'Token requerido', 'VALIDACION_FALLIDA');
+    }
+    req.query['token'] = rawToken;
+    // Reutilizar lógica del GET redirigiendo internamente
+    const tokenHash = hashToken(rawToken);
+    const emailToken = emailTokensRepository.findByHash(tokenHash);
+    if (!emailToken || emailToken.type !== 'MAGIC_LINK') {
+      throw new AppError(400, 'Enlace inválido — solicita uno nuevo', 'TOKEN_INVALIDO');
+    }
+    if (emailToken.used_at) {
+      throw new AppError(400, 'Este enlace ya fue usado — solicita uno nuevo', 'TOKEN_YA_USADO');
+    }
+    if (emailToken.expires_at < Date.now()) {
+      throw new AppError(400, 'El enlace ha expirado — solicita uno nuevo', 'TOKEN_EXPIRADO');
+    }
+    emailTokensRepository.markUsed(emailToken.id);
+    const user = usersRepository.findById(emailToken.user_id);
+    if (!user) throw new AppError(404, 'Usuario no encontrado', 'USUARIO_NO_ENCONTRADO');
+    const ipHash = hashIp(req.ip ?? '');
+    const userAgent = req.headers['user-agent'] ?? null;
+    if (user.mfa_enabled) {
+      const mfaToken = issueTemporaryToken(user.id, 'mfa_session', '5m');
+      auditLogsRepository.create({ user_id: user.id, event_type: 'MAGIC_LINK_VERIFICADO', ip_hash: ipHash, user_agent: userAgent, correlation_id: req.correlationId, metadata: { mfa_required: true } });
+      res.json({ mfa_required: true, mfa_session_token: mfaToken, mensaje: 'Magic link verificado — introduce tu código TOTP' });
+      return;
+    }
+    const roles = JSON.parse(user.roles) as UserRole[];
+    const { accessToken, refreshToken, familyId } = issueTokenPair({ userId: user.id, roles, ipHash, userAgent });
+    auditLogsRepository.create({ user_id: user.id, event_type: 'MAGIC_LINK_VERIFICADO', ip_hash: ipHash, user_agent: userAgent, correlation_id: req.correlationId, metadata: { family_id: familyId } });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env['NODE_ENV'] === 'production', sameSite: 'strict', path: '/api/v1', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ accessToken, expiresIn: 15 * 60, tokenType: 'Bearer' as const, familyId, usuario: { id: user.id, email: user.email, roles } });
+  }),
+);
+
 router.get(
   '/verify',
   asyncHandler(async (req, res) => {

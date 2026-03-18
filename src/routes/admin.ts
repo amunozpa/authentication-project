@@ -14,6 +14,7 @@
  */
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
+import { z } from 'zod';
 import { jwtSigningKeysRepository } from '../db/repositories/jwtSigningKeys';
 import { auditLogsRepository } from '../db/repositories/auditLogs';
 import { usersRepository } from '../db/repositories/users';
@@ -197,6 +198,46 @@ router.delete('/users/:id', authenticate, requireRole('admin'), (req, res) => {
   });
 
   res.json({ mensaje: `Cuenta ${user.email} eliminada correctamente` });
+});
+
+// ── PATCH /api/v1/admin/users/:id/roles ──────────────────────────────────────
+
+const updateRolesSchema = z.object({
+  roles: z.array(z.enum(['admin', 'editor', 'user', 'viewer'])).min(1),
+});
+
+/**
+ * Cambia los roles de un usuario — solo admin.
+ * Un admin no puede modificar sus propios roles.
+ */
+router.patch('/users/:id/roles', authenticate, requireRole('admin'), (req, res) => {
+  const userId = req.params['id'] as string;
+  const adminId = req.user!.userId;
+
+  if (userId === adminId) {
+    throw new AppError(409, 'No puedes cambiar tus propios roles', 'OPERACION_NO_PERMITIDA');
+  }
+
+  const user = usersRepository.findById(userId);
+  if (!user) throw new AppError(404, 'Usuario no encontrado', 'USUARIO_NO_ENCONTRADO');
+
+  const parsed = updateRolesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, 'Roles inválidos. Valores permitidos: admin, editor, user, viewer', 'VALIDACION_FALLIDA');
+  }
+
+  const rolesBefore = JSON.parse(user.roles) as UserRole[];
+  usersRepository.updateRoles(userId, parsed.data.roles);
+
+  auditLogsRepository.create({
+    user_id: adminId,
+    event_type: 'ROLES_ACTUALIZADOS',
+    ip_hash: hashIp(req.ip ?? ''),
+    correlation_id: req.correlationId,
+    metadata: { targetUserId: userId, rolesAntes: rolesBefore, rolesDespues: parsed.data.roles },
+  });
+
+  res.json({ mensaje: `Roles de ${user.email} actualizados`, roles: parsed.data.roles });
 });
 
 // ── GET /api/v1/admin/anomalies — Fase 7 ─────────────────────────────────────
